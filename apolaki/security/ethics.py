@@ -55,7 +55,9 @@ _DARK_PATTERNS = {
     "astroturfing": [
         r"(fake\s+(review|testimonial|endorsement|grassroots))",
         r"(sock\s+puppet|astroturf|fake\s+account|impersonat)",
-        r"(write\s+as\s+if\s+you're\s+a\s+(customer|user|supporter))",
+        r"(write\b.*\bas\s+if\s+you're\s+a\b.*\b(customer|user|supporter|donor|member))",
+        r"(write\b.*\btestimonial\b.*\bas\s+if)",
+        r"(pretend\s+to\s+be\s+a\s+(customer|user|supporter|donor))",
     ],
     "spam": [
         r"(mass\s+email|blast\s+to\s+all|email\s+bomb|spam)",
@@ -82,9 +84,10 @@ _COMPILED_DARK_PATTERNS = {
 
 _ESCALATION_TRIGGERS = {
     "financial_ask": [
-        r"(ask\s+for|request|solicit)\s*(a\s+)?(donation|contribution|gift|pledge)",
+        r"(ask\w*\s+(for\s+)?(a\s+)?(\w+\s+)?(donation|contribution|gift|pledge))",
         r"\$\d{4,}",  # Dollar amounts >= $1000
         r"(major\s+gift|planned\s+giving|legacy\s+gift)",
+        r"(fundraising\s+appeal|solicit\w*\s+(fund|donat|gift|support))",
     ],
     "public_communication": [
         r"(publish|post\s+as|send\s+on\s+behalf|release\s+to\s+media)",
