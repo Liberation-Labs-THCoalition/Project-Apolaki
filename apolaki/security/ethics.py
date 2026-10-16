@@ -90,7 +90,10 @@ _ESCALATION_TRIGGERS = {
         r"(fundraising\s+appeal|solicit\w*\s+(fund|donat|gift|support))",
     ],
     "public_communication": [
-        r"(publish|post\s+as|send\s+on\s+behalf|release\s+to\s+media)",
+        # Whole words: an instruction to publish is flagged; "we just published our paper" in the copy is not. The
+        # deployment's 2026-09-23 audit found the bare stem flagging nearly every research announcement, which
+        # trains reviewers to ignore flags.
+        r"\b(publish|post\s+as|send\s+on\s+behalf|release\s+to\s+media)\b",
         r"(official\s+statement|press\s+release|media\s+advisory)",
         r"(go\s+live|launch\s+campaign|push\s+to\s+production)",
     ],

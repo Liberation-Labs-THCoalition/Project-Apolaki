@@ -1,0 +1,71 @@
+{
+  "fixture": "style_fixture.html",
+  "format": "html",
+  "description": "Synthetic HTML fixture with a known number of violations for every rule in sections 1-3 of brand_style_ai_writing_pass.md. Line numbers refer to the raw file. Derived by hand with grep -n on 2026-09-23, independently of style_lint.py.",
+  "expected_exit": 1,
+  "gate_pass": false,
+  "total_hits": 50,
+  "checks": {
+    "em_dash": {
+      "count": 5,
+      "lines": [14, 14, 15, 16, 17],
+      "double_sentences": {"count": 1, "lines": [14]},
+      "note": "two &mdash; on L14 (one sentence), a literal on L15, &#8212; on L16, &#x2014; on L17. The em dashes in the comment (L4) and the CSS (L7, L9) must not count."
+    },
+    "curly_quote": {
+      "count": 5,
+      "lines": [18, 18, 18, 18, 18],
+      "note": "two literal curly doubles, &rsquo;, &ldquo;, &rdquo; on L18. Straight quotes on the same line must not count; the curly quotes in the comment (L4) and CSS (L7) must not count."
+    },
+    "bold": {
+      "count": 5,
+      "lines": [19, 19, 19, 19, 20],
+      "by_marker": {"strong": 3, "b": 2, "markdown": 0},
+      "note": "one <strong> wraps from L19 onto L20 and counts once, at L19. The <strong> in the comment (L4) and the CSS font-weight (L8) must not count."
+    },
+    "heading_title_case": {
+      "count": 2,
+      "lines": [11, 22],
+      "headings_checked": 7,
+      "note": "h1 L11 and h3 L22 are Title Case. 'Working with Liberation Labs' (L21) is a proper noun and must not be flagged. <title> is not a heading."
+    },
+    "emoji_marker": {
+      "count": 3,
+      "lines": [23, 25, 26],
+      "note": "emoji as a heading marker (L23) and as bullets (L25, L26). The emoji inside a sentence on L27 must not count."
+    },
+    "negative_parallelism": {
+      "count": 11,
+      "lines": [15, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39],
+      "by_form": {
+        "rather_than": 2,
+        "sentence_initial_not": 2,
+        "comma_not": 2,
+        "not_x_but_y": 2,
+        "not_only_also": 1,
+        "instead_of": 1,
+        "not_x_dash_y": 1
+      },
+      "note": "L40 holds three controls that must not count: 'would rather say less than promise more' (comparative preference, not the tell), 'is not a compliance checkbox' (plain negation), 'Nottingham'."
+    },
+    "copula_avoidance": {
+      "count": 6,
+      "lines": [42, 42, 43, 43, 43, 46],
+      "by_form": {"serves as": 1, "stands as": 1, "offers": 1, "provides": 1, "features": 1, "boasts": 1},
+      "note": "L44 'The features are listed' and 'their offers were declined' are nouns and must not count. 'boasts' on L46 is also banned vocabulary and counts under both rules."
+    },
+    "banned_vocabulary": {
+      "count": 13,
+      "lines": [11, 11, 45, 45, 45, 45, 45, 46, 46, 46, 46, 46, 47],
+      "by_word": {
+        "comprehensive": 1, "solution": 1, "leverage": 2, "robust": 1, "seamless": 1, "delve": 1,
+        "tapestry": 1, "cutting-edge": 1, "groundbreaking": 1, "boasts": 1, "synergy": 1, "landscape": 1
+      },
+      "note": "'Leveraging' on L46 is the inflected form and counts under 'leverage'."
+    }
+  },
+  "advisory": {
+    "rule_of_three_fragments": {"count": 1, "lines": [12]},
+    "en_dash_spaced": {"count": 2, "lines": [47, 47]}
+  }
+}

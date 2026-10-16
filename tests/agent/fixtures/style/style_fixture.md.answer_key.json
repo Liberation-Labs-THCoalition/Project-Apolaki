@@ -1,0 +1,65 @@
+{
+  "fixture": "style_fixture.md",
+  "format": "markdown",
+  "description": "Synthetic Markdown fixture: the prose shape extract.py produces (** bold, # headings), plus a code fence whose contents must be ignored. Derived by hand with grep -n on 2026-09-23, independently of style_lint.py.",
+  "expected_exit": 1,
+  "gate_pass": false,
+  "total_hits": 26,
+  "checks": {
+    "em_dash": {
+      "count": 3,
+      "lines": [7, 7, 8],
+      "double_sentences": {"count": 1, "lines": [7]},
+      "note": "the em dash inside the code fence (L24) must not count."
+    },
+    "curly_quote": {
+      "count": 3,
+      "lines": [27, 27, 27],
+      "note": "two curly doubles and one curly apostrophe on L27; the curly quotes in the code fence (L24) must not count."
+    },
+    "bold": {
+      "count": 3,
+      "lines": [12, 12, 12],
+      "by_marker": {"strong": 0, "b": 0, "markdown": 3},
+      "note": "**list**, __not a dashboard__, and a **span** that wraps from L12 onto L13 (counted once, at L12). The **this** inside the code fence (L24) must not count."
+    },
+    "heading_title_case": {
+      "count": 2,
+      "lines": [5, 15],
+      "headings_checked": 4,
+      "note": "ATX h2 on L5 and the setext heading whose text is on L15 (underline L16). 'Beacon Field Notes' (L1) has only two capitalised words after the first and must not be flagged."
+    },
+    "emoji_marker": {
+      "count": 3,
+      "lines": [18, 19, 21],
+      "note": "bullets on L18, L19, L21. The emoji inside a sentence on L20 must not count."
+    },
+    "negative_parallelism": {
+      "count": 7,
+      "lines": [8, 12, 29, 29, 29, 29, 29],
+      "by_form": {
+        "rather_than": 1,
+        "sentence_initial_not": 1,
+        "comma_not": 2,
+        "not_x_but_y": 2,
+        "instead_of": 1
+      },
+      "note": "L8 'not guessing, but counting — and' is one instance (not X but Y), not two. L12 ', __not a dashboard__' is a comma-not with a bold marker in the gap. L31 holds the controls that must not count."
+    },
+    "copula_avoidance": {
+      "count": 2,
+      "lines": [33, 33],
+      "by_form": {"serves as": 1, "provides": 1},
+      "note": "'The features are listed' on L33 is a noun and must not count."
+    },
+    "banned_vocabulary": {
+      "count": 3,
+      "lines": [35, 35, 35],
+      "by_word": {"leverage": 1, "seamless": 1, "landscape": 1}
+    }
+  },
+  "advisory": {
+    "rule_of_three_fragments": {"count": 0, "lines": []},
+    "en_dash_spaced": {"count": 0, "lines": []}
+  }
+}

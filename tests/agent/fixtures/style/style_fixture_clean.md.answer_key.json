@@ -1,0 +1,22 @@
+{
+  "fixture": "style_fixture_clean.md",
+  "format": "markdown",
+  "description": "Negative control: clean copy that also carries every known false-positive trap (comparative 'would rather ... than', 'the features' as a noun, 'their offers' as a noun, a plain 'is not a ...' negation, 'Nottingham', an unspaced en dash in 'Tiers 1-3', straight quotes, a proper-noun heading). Every count must be zero and the exit status must be 0. Guards against a linter that flags everything.",
+  "expected_exit": 0,
+  "gate_pass": true,
+  "total_hits": 0,
+  "checks": {
+    "em_dash": {"count": 0, "lines": [], "double_sentences": {"count": 0, "lines": []}},
+    "curly_quote": {"count": 0, "lines": []},
+    "bold": {"count": 0, "lines": [], "by_marker": {"strong": 0, "b": 0, "markdown": 0}},
+    "heading_title_case": {"count": 0, "lines": [], "headings_checked": 2},
+    "emoji_marker": {"count": 0, "lines": []},
+    "negative_parallelism": {"count": 0, "lines": [], "by_form": {}},
+    "copula_avoidance": {"count": 0, "lines": [], "by_form": {}},
+    "banned_vocabulary": {"count": 0, "lines": [], "by_word": {}}
+  },
+  "advisory": {
+    "rule_of_three_fragments": {"count": 0, "lines": []},
+    "en_dash_spaced": {"count": 0, "lines": []}
+  }
+}

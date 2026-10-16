@@ -99,3 +99,11 @@ class TestBatch:
         checks = engine.evaluate_batch(items)
         assert checks[0].verdict == EthicsVerdict.BLOCKED
         assert checks[-1].verdict == EthicsVerdict.APPROVED
+
+
+def test_past_tense_publishing_in_copy_is_not_a_publish_instruction():
+    # The deployment's 2026-09-23 audit: the bare stem matched "published" in nearly every announcement.
+    from apolaki.security.ethics import MarketingEthicsEngine
+    engine = MarketingEthicsEngine()
+    assert engine.evaluate("We just published our paper on confabulation detection.").verdict == EthicsVerdict.APPROVED
+    assert engine.evaluate("Publish this update to the newsletter.").verdict == EthicsVerdict.FLAGGED

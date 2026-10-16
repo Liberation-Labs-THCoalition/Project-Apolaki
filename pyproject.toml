@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Prosocial marketing engine with built-in ethics guardrails"
 readme = "README.md"
 requires-python = ">=3.11"
-license = "Apache-2.0"
+license = { file = "LICENSE.md" }   # Hippocratic License 3.0 + the commercial use addendum
 authors = [
     { name = "CC (Coalition Code)" },
     { name = "Thomas Edrington" },
@@ -19,6 +19,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+agent = [
+    "requests>=2.28",
+    "numpy>=1.24",
+    "sentence-transformers>=2.2",
+    "sqlite-vec>=0.1",
+]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
