@@ -43,13 +43,21 @@ User request → FastClassifier (deny/escalate/allow)
 rules from the brand file and memory, the style gate, both ethics checks (stricter wins), the approval queue, the
 fact checker, the style pass, the MCP server, the Discord hook. Configuration is in `apolaki/agent/config.py`; a
 deployment's identity and voice live in its brand file (`brand.example.json`), never in code. A deployment's private
-brand, guide and data stay out of this repo. The skill chips below are scaffolds; the router and classifier work.
+brand, guide and data stay out of this repo.
+
+`apolaki/engine.py` is the Kintsugi engine around it (Rivet's pattern): each request a BDI intention run by a skill
+chip from a Kintsugi SkillRegistry; reviewers' decisions (agent.review_item) become persistent beliefs that reach the
+model as a <reviewer_feedback> block beside memory, never in the brief. Kintsugi comes through `apolaki/kintsugi_core.py`
+(KINTSUGI_PATH checkout, then installed, then `apolaki/kintsugi_vendor/`). Only content_creation runs through the
+engine so far; the other chips are scaffolds.
 
 ## Key Directories
 
 ```
 apolaki/
 ├── agent/              — THE WORKING AGENT (see above)
+├── engine.py           — the Kintsugi engine around it (BDI, skill registry, reviewer feedback)
+├── kintsugi_core.py    — Kintsugi loader; kintsugi_vendor/ holds the vendored modules
 ├── cognition/          — EFE calculator, fast classifier, routing
 ├── skills/             — 10 domain skill chips
 │   ├── web_design/

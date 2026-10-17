@@ -205,6 +205,24 @@ LAST_RESPONSE: dict = {}
 THINK_CLOSERS = ("</think>", "</thinking>", "<|end_of_thought|>")
 
 
+REVIEW_DECISIONS = ("approved", "rejected", "changes_requested")
+
+
+def review_item(item_id: str, decision: str, note: str = "", reviewer: str = "") -> dict:
+    """Record a person's decision on a queue item. Until 2026-10-16 nothing did: every item stayed "pending", so no
+    decision was ever on record for the agent to learn from. Returns the updated item."""
+    if decision not in REVIEW_DECISIONS:
+        raise ValueError(f"decision must be one of {REVIEW_DECISIONS}, not {decision!r}")
+    matches = sorted(config.folder("approval-queue").glob(f"{item_id}_*.json"))
+    if len(matches) != 1:
+        raise ValueError(f"no single queue item with id {item_id!r} ({len(matches)} found)")
+    item = json.loads(matches[0].read_text())
+    item.update(status=decision, review_note=note.strip(), reviewed_by=reviewer.strip(),
+                reviewed_at=datetime.now(timezone.utc).isoformat())
+    matches[0].write_text(json.dumps(item, indent=2, ensure_ascii=False))
+    return item
+
+
 def _parse_chat_response(data: dict) -> tuple[str, dict]:
     """Turn one /api/chat JSON body into (text, meta). Pure; guarded by the smoke test.
 
@@ -520,8 +538,12 @@ class ApolakiAgent:
     # -- drafting --
 
     def draft_content(self, brief: str, content_type: str = "social",
-                      revise_on_lint_fail: bool = True, max_tokens: int = 4096) -> dict:
-        """Draft content, lint it, revise once if the mechanical gate fails, queue for approval."""
+                      revise_on_lint_fail: bool = True, max_tokens: int = 4096, reviewer_feedback: str = "") -> dict:
+        """Draft content, lint it, revise once if the mechanical gate fails, queue for approval.
+
+        reviewer_feedback is a ready-made reference block (from apolaki.engine) of what reviewers said about recent
+        drafts. It joins the retrieved memory, never the brief: the ethics check reads the brief, and a reviewer's
+        note quoting a dark pattern ("too much 'act now'") must not block the next request."""
         # Ethics on the INPUT first. The astroturf and dark-pattern regexes were
         # written for instructions ("write a testimonial as if you're a customer"),
         # and instructions arrive in the brief; before 2026-09-23 the check only ever
@@ -537,6 +559,8 @@ class ApolakiAgent:
 
         results = self.memory.search(brief, n_results=6)
         block = build_retrieved_block(results, RETRIEVAL_NOTE)
+        if reviewer_feedback:
+            block = block + ("\n\n" if block else "") + reviewer_feedback
 
         prompt = (
             "<brief type=\"%s\">\n%s\n</brief>\n\n%s%s"

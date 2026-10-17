@@ -27,15 +27,21 @@ The working agent (`apolaki.agent`) is the system Liberation Labs runs for its o
     sensitive political topics, sharing data with outside parties.
 - **An approval queue.** Nothing is published by Apolaki. Every draft lands in the queue with its ethics verdict
   and lint results, and a person approves it. An optional Discord hook posts each item to a review channel.
+- **It learns from its reviewers.** A reviewer's decision (approved, rejected, changes requested, with a note) is
+  recorded on the queue item, and the Kintsugi engine keeps each one as a belief. The recent notes for a content type
+  go to the model with the next brief of that type, as reference material beside memory. They never go into the
+  brief itself, which is what the ethics check reads.
+- **Runs on the Kintsugi engine.** Each request is a BDI intention carried out by a skill chip from a Kintsugi skill
+  registry (Rivet's pattern). Kintsugi's BDI and skill modules are vendored, so a bare install works, and a Kintsugi
+  checkout (`KINTSUGI_PATH`) takes precedence when there is one.
 - **An MCP server** exposes the memory store to other tools.
 
 ## What it is designed to grow into
 
 Ten skill domains are laid out as skill chips (web design, social media, content creation, lead generation,
 partnerships, media relations, fundraising, brand strategy, analytics, community), with a fast classifier and an
-expected-free-energy router that picks the chip for a request. The router and classifier work; the chips are
-scaffolds today, and they are being filled from what the working agent already does (grant drafting first). Wiring
-the full Kintsugi engine in is the next step.
+expected-free-energy router that picks the chip for a request. Content creation runs through the engine today; the
+other chips are scaffolds, and they are being filled from what the working agent already does (grant drafting next).
 
 ## Set it up
 
@@ -43,10 +49,12 @@ You need Python 3.11+, [Ollama](https://ollama.com) and a capable local model. W
 
 ```bash
 pip install -e ".[agent,dev]"
-python -m pytest tests/                       # 68 tests; none needs a model
+python -m pytest tests/                       # 81 tests; none needs a model
 
 mkdir -p ~/.apolaki
 cp brand.example.json ~/.apolaki/brand.json   # then make it yours: name, voice, reviewers
+python -m apolaki.engine draft "BRIEF" --type social     # one draft, through the engine
+python -m apolaki.engine review QUEUE_ID rejected "NOTE"  # record a reviewer's decision
 python -m apolaki.agent.agent                 # the interactive agent
 python -m apolaki.agent.style_pass draft.md   # the judgement pass on a finished piece
 python -m apolaki.agent.fact_checker draft.md # the fact checker
@@ -67,11 +75,12 @@ Without a brand file, Apolaki uses a plain, generic voice and names no one.
 ## Architecture
 
 ```
-brief -> ethics check (both checks; a blocked brief never reaches the model)
-      -> model, with the brand, the house rules and retrieved memory
+brief -> BDI intention -> content-creation chip
+      -> ethics check (both checks; a blocked brief never reaches the model)
+      -> model, with the brand, the house rules, retrieved memory and recent reviewer notes
       -> style lint -> one revision if it fails
       -> ethics check on the draft
-      -> approval queue -> a person approves -> published by a person
+      -> approval queue -> a person decides -> the decision becomes a belief for next time
 ```
 
 ## License
