@@ -37,10 +37,19 @@ User request → FastClassifier (deny/escalate/allow)
 | **analytics** | Campaign metrics, ROI, A/B testing, reporting | risk=0.2, ambiguity=0.3, epistemic=0.5 |
 | **community_engagement** | Community management, advocacy mobilization | risk=0.3, ambiguity=0.3, epistemic=0.4 |
 
+## The working agent (start here)
+
+`apolaki/agent/` is the system that runs (ported 2026-10-16 from the Starship deployment): the agent loop with house
+rules from the brand file and memory, the style gate, both ethics checks (stricter wins), the approval queue, the
+fact checker, the style pass, the MCP server, the Discord hook. Configuration is in `apolaki/agent/config.py`; a
+deployment's identity and voice live in its brand file (`brand.example.json`), never in code. A deployment's private
+brand, guide and data stay out of this repo. The skill chips below are scaffolds; the router and classifier work.
+
 ## Key Directories
 
 ```
 apolaki/
+├── agent/              — THE WORKING AGENT (see above)
 ├── cognition/          — EFE calculator, fast classifier, routing
 ├── skills/             — 10 domain skill chips
 │   ├── web_design/
