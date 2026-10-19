@@ -48,8 +48,10 @@ class ContentCreationChip(k.BaseSkillChip):
         self.agent = agent
 
     async def handle(self, request: k.SkillRequest, context: k.SkillContext) -> k.SkillResponse:
+        # max_tokens reaches the agent only when a caller set it, so the agent's own default holds otherwise.
+        extra = {"max_tokens": request.parameters["max_tokens"]} if "max_tokens" in request.parameters else {}
         result = self.agent.draft_content(request.raw_input, content_type=request.parameters.get("content_type", "social"),
-                                          reviewer_feedback=context.metadata.get("reviewer_feedback", ""))
+                                          reviewer_feedback=context.metadata.get("reviewer_feedback", ""), **extra)
         ok = result.get("status") != "blocked"
         return k.SkillResponse(content=result.get("draft", ""), success=ok, data=result,
                                requires_consensus=ok, consensus_action="publish" if ok else None)
@@ -135,8 +137,13 @@ class ApolakiEngine:
                 f'</reviewer_feedback>')
 
     # ---- a request ---------------------------------------------------------------------------------------------
-    def draft(self, brief: str, content_type: str = "social") -> dict:
-        """One draft, as a BDI intention carried out by the content-creation chip."""
+    def draft(self, brief: str, content_type: str = "social", max_tokens: int | None = None) -> dict:
+        """One draft, as a BDI intention carried out by the content-creation chip.
+
+        max_tokens raises the model's output budget for long forms (a grant section runs past the 4096 default and
+        would come back truncated, which the agent refuses to queue)."""
+        if max_tokens is not None and (isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1):
+            raise ValueError(f"max_tokens must be a positive integer, not {max_tokens!r}")
         self.sync_reviews()
         feedback = self.feedback_block(content_type)
         used = [b.id for b in self.bdi.list_beliefs(k.BeliefStatus.ACTIVE)
@@ -146,7 +153,10 @@ class ApolakiEngine:
         self.bdi.add_intention(intention)
         chip = self.registry.get(ContentCreationChip.name)
         context = k.SkillContext(org_id=self.org, user_id="apolaki", metadata={"reviewer_feedback": feedback})
-        request = k.SkillRequest(intent="draft", raw_input=brief, parameters={"content_type": content_type})
+        parameters = {"content_type": content_type}
+        if max_tokens is not None:
+            parameters["max_tokens"] = max_tokens
+        request = k.SkillRequest(intent="draft", raw_input=brief, parameters=parameters)
         response = asyncio.run(chip.handle(request, context))
         if response.success:
             self.bdi.complete_intention(intention.id)
@@ -161,6 +171,7 @@ def main(argv=None) -> int:
     d = sub.add_parser("draft")
     d.add_argument("brief")
     d.add_argument("--type", default="social")
+    d.add_argument("--max-tokens", type=int, default=None, help="output budget for long forms (the agent's default is 4096)")
     r = sub.add_parser("review")
     r.add_argument("queue_id")
     r.add_argument("decision", choices=("approved", "rejected", "changes_requested"))
@@ -177,7 +188,7 @@ def main(argv=None) -> int:
     if a.cmd == "sync":
         print(f"{engine.sync_reviews()} new decision(s) recorded as beliefs")
         return 0
-    out = engine.draft(a.brief, a.type)
+    out = engine.draft(a.brief, a.type, max_tokens=a.max_tokens)
     print(out.get("draft", ""))
     print(f"\n[{out.get('status')}; queue {out.get('queue_id')}; reviewer feedback used: {out['reviewer_feedback_used']}]",
           file=sys.stderr)

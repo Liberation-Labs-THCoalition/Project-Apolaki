@@ -19,8 +19,9 @@ class FakeAgent:
         self.calls = []
         self.status = status
 
-    def draft_content(self, brief, content_type="social", reviewer_feedback=""):
-        self.calls.append({"brief": brief, "content_type": content_type, "reviewer_feedback": reviewer_feedback})
+    def draft_content(self, brief, content_type="social", reviewer_feedback="", max_tokens="unset"):
+        self.calls.append({"brief": brief, "content_type": content_type, "reviewer_feedback": reviewer_feedback,
+                           "max_tokens": max_tokens})
         return {"draft": "DRAFT", "status": self.status, "queue_id": "q1"}
 
 
@@ -159,3 +160,60 @@ def test_a_kintsugi_checkout_wins_over_the_vendored_copy(tmp_path):
     env = {"KINTSUGI_PATH": str(tmp_path), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(Path(__file__).resolve().parents[2])}
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True).stdout.split()
     assert out[0] == f"checkout:{tmp_path}" and out[1].startswith(str(tmp_path))
+
+
+def test_max_tokens_reaches_the_agent_only_when_set(home):
+    agent = FakeAgent()
+    e = engine(home, agent)
+    e.draft("A grant narrative", "grant", max_tokens=8000)
+    assert agent.calls[-1]["max_tokens"] == 8000
+    e.draft("A post", "social")
+    assert agent.calls[-1]["max_tokens"] == "unset"
+
+
+@pytest.mark.parametrize("bad", [0, -1, True, "8000", 1.5])
+def test_max_tokens_must_be_a_positive_integer(home, bad):
+    agent = FakeAgent()
+    with pytest.raises(ValueError, match="max_tokens"):
+        engine(home, agent).draft("A grant narrative", "grant", max_tokens=bad)
+    assert agent.calls == []
+
+
+def test_max_tokens_becomes_the_model_budget_on_the_real_path(home, monkeypatch):
+    from apolaki.agent import agent as A
+    budgets = []
+
+    def fake_chat(messages, temperature=0.7, max_tokens=2048):
+        budgets.append(max_tokens)
+        A.LAST_RESPONSE.clear()
+        A.LAST_RESPONSE.update({"truncated": False})
+        return "Our tenant clinic opens Monday at the library."
+
+    class Memory:
+        def search(self, query, n_results=6):
+            return []
+
+    monkeypatch.setattr(A, "chat", fake_chat)
+    agent = object.__new__(A.ApolakiAgent)
+    agent.memory, agent.history, agent.auto_capture, agent.house_rules_count = Memory(), [{"role": "system", "content": "S"}], False, 0
+    engine(home, agent).draft("Announce the clinic", "social", max_tokens=8000)
+    assert budgets and set(budgets) == {8000}
+    budgets.clear()
+    engine(home, agent).draft("Announce the clinic", "social")
+    assert budgets and set(budgets) == {4096}
+
+
+def test_the_cli_passes_max_tokens(home, monkeypatch):
+    import apolaki.engine as E
+    seen = {}
+
+    class Stub:
+        def draft(self, brief, content_type="social", max_tokens=None):
+            seen.update(brief=brief, content_type=content_type, max_tokens=max_tokens)
+            return {"draft": "D", "status": "queued_for_review", "queue_id": "q", "reviewer_feedback_used": False}
+
+    monkeypatch.setattr(E, "ApolakiEngine", Stub)
+    assert E.main(["draft", "A grant narrative", "--type", "grant", "--max-tokens", "8000"]) == 0
+    assert seen == {"brief": "A grant narrative", "content_type": "grant", "max_tokens": 8000}
+    assert E.main(["draft", "A post"]) == 0
+    assert seen["max_tokens"] is None
