@@ -89,6 +89,15 @@ def test_a_missing_or_broken_brand_file_gives_the_generic_brand(home):
     assert config.brand()["name"] == "the organization"
 
 
+def test_brand_path_is_where_brand_reads(home, monkeypatch, tmp_path):
+    from apolaki.agent import config
+    assert config.brand_path() == home / "brand.json"
+    other = tmp_path / "elsewhere.json"
+    other.write_text(json.dumps({"name": "Elsewhere Co-op"}))
+    monkeypatch.setenv("APOLAKI_BRAND_FILE", str(other))
+    assert config.brand_path() == other and config.brand()["name"] == "Elsewhere Co-op"
+
+
 # ---- the prompt ----------------------------------------------------------------------------------------------------
 def test_the_generic_prompt_names_no_one(home):
     from apolaki.agent import agent

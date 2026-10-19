@@ -48,8 +48,14 @@ BRAND_TEXT_DEFAULTS = {
 }
 
 
+def brand_path() -> Path:
+    """Where the brand file is looked for. brand() falls back to generic defaults when it's missing, so a caller that
+    must not run on the defaults (grant_hunt) checks this path exists first."""
+    return Path(os.environ.get("APOLAKI_BRAND_FILE", str(home() / "brand.json"))).expanduser()
+
+
 def brand() -> dict:
-    path = Path(os.environ.get("APOLAKI_BRAND_FILE", str(home() / "brand.json"))).expanduser()
+    path = brand_path()
     try:
         data = json.loads(path.read_text())
     except (OSError, ValueError):
