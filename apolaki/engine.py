@@ -3,11 +3,16 @@
 - Each draft request becomes a BDI intention, carried out by a skill chip from a Kintsugi SkillRegistry. The first
   real chip is content creation: the working agent's draft loop (ethics on the brief, house rules, style gate, approval
   queue). The other chips in apolaki/skills are scaffolds until they get the same treatment.
-- A person's decisions on queue items (agent.review_item) become BDI beliefs, kept in $APOLAKI_HOME/engine_beliefs.json
-  so they survive restarts. The recent ones for a content type go to the model as a <reviewer_feedback> reference
-  block, beside retrieved memory and never in the brief: the brief is what the ethics check reads.
+- With learning on (ApolakiEngine(learn=True), `draft --learn`), a person's decisions on queue items (agent.review_item)
+  become BDI beliefs, kept in $APOLAKI_HOME/engine_beliefs.json so they survive restarts, and the recent ones for a
+  content type go to the model as a <reviewer_feedback> reference block, beside retrieved memory and never in the
+  brief: the brief is what the ethics check reads.
+- Learning is OFF by default. Feedback that persists from run to run and shapes later drafts is learning from feedback
+  across runs, close to Butlin et al.'s agency indicator (AE-1), and Thomas keeps that development off on purpose for
+  our long-running local agents until he decides (his words, 10-06; Nexus's reading, 10-19). Off, a draft forms no
+  belief and the model sees no feedback; `sync` still records decisions when a person runs it.
 
-    python -m apolaki.engine draft "BRIEF" [--type social]
+    python -m apolaki.engine draft "BRIEF" [--type social] [--max-tokens N] [--learn]
     python -m apolaki.engine review QUEUE_ID approved|rejected|changes_requested ["NOTE"] [--by NAME]
     python -m apolaki.engine sync            # turn recorded decisions into beliefs
 """
@@ -58,7 +63,8 @@ class ContentCreationChip(k.BaseSkillChip):
 
 
 class ApolakiEngine:
-    def __init__(self, agent=None) -> None:
+    def __init__(self, agent=None, learn: bool = False) -> None:
+        self.learn = learn
         if agent is None:
             from .agent.agent import ApolakiAgent
             agent = ApolakiAgent()
@@ -144,10 +150,12 @@ class ApolakiEngine:
         would come back truncated, which the agent refuses to queue)."""
         if max_tokens is not None and (isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1):
             raise ValueError(f"max_tokens must be a positive integer, not {max_tokens!r}")
-        self.sync_reviews()
-        feedback = self.feedback_block(content_type)
-        used = [b.id for b in self.bdi.list_beliefs(k.BeliefStatus.ACTIVE)
-                if "review" in b.tags and content_type in b.tags]
+        feedback, used = "", []
+        if self.learn:  # off by default: see the module docstring
+            self.sync_reviews()
+            feedback = self.feedback_block(content_type)
+            used = [b.id for b in self.bdi.list_beliefs(k.BeliefStatus.ACTIVE)
+                    if "review" in b.tags and content_type in b.tags]
         intention = k.BDIIntention(id=str(uuid.uuid4()), goal=f"Draft {content_type} copy: {brief.strip()[:120]}",
                                    status=k.IntentionStatus.ACTIVE, belief_ids=used, desire_ids=[], created_at=_now())
         self.bdi.add_intention(intention)
@@ -172,6 +180,7 @@ def main(argv=None) -> int:
     d.add_argument("brief")
     d.add_argument("--type", default="social")
     d.add_argument("--max-tokens", type=int, default=None, help="output budget for long forms (the agent's default is 4096)")
+    d.add_argument("--learn", action="store_true", help="reviewers' decisions become beliefs and reach the model (off by default)")
     r = sub.add_parser("review")
     r.add_argument("queue_id")
     r.add_argument("decision", choices=("approved", "rejected", "changes_requested"))
@@ -184,7 +193,7 @@ def main(argv=None) -> int:
         item = review_item(a.queue_id, a.decision, a.note, a.by)
         print(f"{item['id']}: {item['status']}")
         return 0
-    engine = ApolakiEngine()
+    engine = ApolakiEngine(learn=getattr(a, "learn", False))
     if a.cmd == "sync":
         print(f"{engine.sync_reviews()} new decision(s) recorded as beliefs")
         return 0

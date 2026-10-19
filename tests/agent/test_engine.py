@@ -32,9 +32,9 @@ def queue_item(home, item_id, content_type="social", status="pending", note=""):
     (d / f"{item_id}_{content_type}.json").write_text(json.dumps(item))
 
 
-def engine(home, agent=None):
+def engine(home, agent=None, learn=False):
     from apolaki.engine import ApolakiEngine
-    return ApolakiEngine(agent or FakeAgent())
+    return ApolakiEngine(agent or FakeAgent(), learn=learn)
 
 
 def test_the_engine_loads_kintsugi():
@@ -75,7 +75,7 @@ def test_beliefs_survive_a_restart(home):
 def test_feedback_reaches_the_model_beside_memory_never_in_the_brief(home):
     queue_item(home, "20261016_120000", status="rejected", note="no 'act now' urgency, ever")
     agent = FakeAgent()
-    out = engine(home, agent).draft("Announce the clinic", "social")
+    out = engine(home, agent, learn=True).draft("Announce the clinic", "social")
     call = agent.calls[0]
     assert call["brief"] == "Announce the clinic"                                   # the brief is untouched
     assert "<reviewer_feedback" in call["reviewer_feedback"] and "act now" in call["reviewer_feedback"]
@@ -208,12 +208,63 @@ def test_the_cli_passes_max_tokens(home, monkeypatch):
     seen = {}
 
     class Stub:
+        def __init__(self, learn=False):
+            seen["learn"] = learn
+
         def draft(self, brief, content_type="social", max_tokens=None):
             seen.update(brief=brief, content_type=content_type, max_tokens=max_tokens)
             return {"draft": "D", "status": "queued_for_review", "queue_id": "q", "reviewer_feedback_used": False}
 
     monkeypatch.setattr(E, "ApolakiEngine", Stub)
     assert E.main(["draft", "A grant narrative", "--type", "grant", "--max-tokens", "8000"]) == 0
-    assert seen == {"brief": "A grant narrative", "content_type": "grant", "max_tokens": 8000}
+    assert seen == {"brief": "A grant narrative", "content_type": "grant", "max_tokens": 8000, "learn": False}
     assert E.main(["draft", "A post"]) == 0
     assert seen["max_tokens"] is None
+
+
+# ---- learning is off unless asked for (Butlin AE-1: Thomas 10-06, Nexus 10-19) -------------------------------------
+def test_by_default_a_draft_forms_no_belief_and_the_model_sees_no_feedback(home):
+    queue_item(home, "20261016_120000", status="rejected", note="no 'act now' urgency, ever")
+    agent = FakeAgent()
+    e = engine(home, agent)
+    out = e.draft("Announce the clinic", "social")
+    assert agent.calls[0]["reviewer_feedback"] == "" and out["reviewer_feedback_used"] is False
+    assert e.bdi.list_beliefs() == [] and not (home / "engine_beliefs.json").exists()
+    assert e.bdi.list_intentions()[0].belief_ids == []
+
+
+def test_with_learning_on_the_decision_becomes_a_belief_and_reaches_the_model(home):
+    queue_item(home, "20261016_120000", status="rejected", note="no 'act now' urgency, ever")
+    agent = FakeAgent()
+    e = engine(home, agent, learn=True)
+    e.draft("Announce the clinic", "social")
+    assert "act now" in agent.calls[0]["reviewer_feedback"] and len(e.bdi.list_beliefs()) == 1
+    assert e.bdi.list_intentions()[0].belief_ids == [e.bdi.list_beliefs()[0].id]
+
+
+def test_the_cli_turns_learning_on_only_when_asked(home, monkeypatch):
+    import apolaki.engine as E
+    seen = {}
+
+    class Stub:
+        def __init__(self, learn=False):
+            seen["learn"] = learn
+
+        def draft(self, brief, content_type="social", max_tokens=None):
+            return {"draft": "D", "status": "queued_for_review", "queue_id": "q", "reviewer_feedback_used": False}
+
+    monkeypatch.setattr(E, "ApolakiEngine", Stub)
+    E.main(["draft", "A post"])
+    assert seen["learn"] is False
+    E.main(["draft", "A post", "--learn"])
+    assert seen["learn"] is True
+
+
+def test_an_engine_built_without_saying_does_not_learn(home):
+    """The default itself, not a helper's argument: grant_hunt and others build ApolakiEngine(agent)."""
+    from apolaki.engine import ApolakiEngine
+    queue_item(home, "20261016_120000", status="rejected", note="no 'act now' urgency, ever")
+    agent = FakeAgent()
+    e = ApolakiEngine(agent)
+    e.draft("Announce the clinic", "social")
+    assert e.learn is False and agent.calls[0]["reviewer_feedback"] == "" and e.bdi.list_beliefs() == []
