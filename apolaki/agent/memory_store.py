@@ -15,9 +15,15 @@ Runs entirely local on the Mac Studio.
     type-filtered search could return fewer rows than asked for whenever other
     types ranked higher. It now over-fetches when a type filter is set.
   - list_by_type() for deterministic loading of the house rules.
+
+2026-10-20 (CC): store() and search() both need spaCy and its en_core_web_md model for the entity graph, and
+neither was declared, so an install from the [agent] extra failed at the first store, after the row was committed.
+spacy is now in the extra, and the store refuses to open without spaCy and the model, naming the install step,
+before anything is written.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import sqlite3
@@ -50,11 +56,24 @@ def _get_embedder():
     return _embedder
 
 
+NLP_MODEL = "en_core_web_md"
+
+
+def _nlp_missing() -> Optional[str]:
+    """What the entity graph is missing, as the step that installs it, or None when spaCy and its model are there."""
+    if importlib.util.find_spec("spacy") is None:
+        return f'spaCy is not installed: pip install "apolaki[agent]", then python -m spacy download {NLP_MODEL}'
+    import spacy.util
+    if not spacy.util.is_package(NLP_MODEL):
+        return f"spaCy's {NLP_MODEL} model is not installed: python -m spacy download {NLP_MODEL}"
+    return None
+
+
 def _get_nlp():
     global _nlp
     if _nlp is None:
         import spacy
-        _nlp = spacy.load("en_core_web_md", disable=["parser", "lemmatizer"])
+        _nlp = spacy.load(NLP_MODEL, disable=["parser", "lemmatizer"])
         _nlp.add_pipe("sentencizer")
     return _nlp
 
@@ -204,6 +223,9 @@ class ApolakiMemoryStore:
     """Full-stack memory: CMA + KG + TGS + Wiki on SQLite."""
 
     def __init__(self, db_path: Path = DB_PATH, wiki_path: Path = WIKI_PATH):
+        missing = _nlp_missing()
+        if missing:     # every store() and search() reaches the entity graph; refuse before writing anything
+            raise RuntimeError(f"the memory store can't open: {missing}")
         self.db_path = db_path
         self.wiki_path = wiki_path
         db_path.parent.mkdir(parents=True, exist_ok=True)

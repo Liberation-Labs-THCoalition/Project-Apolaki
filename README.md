@@ -49,7 +49,8 @@ You need Python 3.11+, [Ollama](https://ollama.com) and a capable local model. W
 
 ```bash
 pip install -e ".[agent,dev]"
-python -m pytest tests/                       # 81 tests; none needs a model
+python -m spacy download en_core_web_md       # the memory store's entity graph won't open without it
+python -m pytest tests/                       # none needs a model
 
 mkdir -p ~/.apolaki
 cp brand.example.json ~/.apolaki/brand.json   # then make it yours: name, voice, reviewers

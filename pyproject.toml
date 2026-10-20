@@ -23,6 +23,7 @@ agent = [
     "requests>=2.28",
     "numpy>=1.24",
     "sentence-transformers>=2.2",
+    "spacy>=3.5",           # the memory store's entity graph; then: python -m spacy download en_core_web_md
     "sqlite-vec>=0.1",
 ]
 dev = [
