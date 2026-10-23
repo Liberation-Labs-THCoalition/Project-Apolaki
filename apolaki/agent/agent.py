@@ -203,6 +203,7 @@ def list_queue() -> list[dict]:
 LAST_RESPONSE: dict = {}
 
 THINK_CLOSERS = ("</think>", "</thinking>", "<|end_of_thought|>")
+THINK_TIMEOUT_S = 1200  # a chat() call with thinking on (see chat())
 
 
 REVIEW_DECISIONS = ("approved", "rejected", "changes_requested")
@@ -293,7 +294,10 @@ def chat(messages: list[dict], temperature: float = 0.7, max_tokens: int = 2048,
                 "think": think,
                 "options": {"temperature": temperature, "num_predict": max_tokens},
             },
-            timeout=600,
+            # With thinking on, max_tokens covers reasoning too: the grant drafter's 16,000 take 958 s at the slowest
+            # rate arm E measured (16.7 tok/s), so 600 s would cut off an honest draft. The timeout only bounds a hung
+            # call; the default call keeps its 600 s.
+            timeout=THINK_TIMEOUT_S if think else 600,
         )
         try:
             data = resp.json()

@@ -219,3 +219,14 @@ def test_chat_refuses_a_think_that_is_not_a_bool(home, monkeypatch, think):
     with pytest.raises(TypeError, match="think"):
         agent.chat([{"role": "user", "content": "q"}], think=think)
     assert sent == []
+
+
+@pytest.mark.parametrize("think,timeout", [(False, 600), (True, 1200)])
+def test_a_thinking_call_gets_the_longer_timeout_and_the_default_keeps_600(home, monkeypatch, think, timeout):
+    """16,000 tokens of reasoning and draft take 958 s at the slowest rate arm E measured (10-23)."""
+    from apolaki.agent import agent
+    seen = []
+    body = {"message": {"content": "the answer"}, "done_reason": "stop"}
+    monkeypatch.setattr(agent.requests, "post", lambda url, json=None, timeout=None: seen.append(timeout) or _Resp(body))
+    agent.chat([{"role": "user", "content": "q"}], think=think)
+    assert seen == [timeout]
