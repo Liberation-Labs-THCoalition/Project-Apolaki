@@ -176,3 +176,46 @@ def test_the_discord_hook_is_off_without_a_channel(home, monkeypatch):
     monkeypatch.setattr(dh, "DISCORD_TOKEN", "x")
     out = dh.post_for_review("draft")
     assert "off" in out.get("error", "")
+
+
+class _Resp:
+    status_code = 200
+
+    def __init__(self, body):
+        self._body = body
+
+    def json(self):
+        return self._body
+
+
+def _send(monkeypatch, agent, **kw):
+    sent = []
+    body = {"message": {"content": "the answer", "thinking": "some reasoning"}, "done_reason": "stop"}
+    monkeypatch.setattr(agent.requests, "post", lambda url, json=None, timeout=None: sent.append(json) or _Resp(body))
+    return agent.chat([{"role": "user", "content": "q"}], **kw), sent
+
+
+def test_chat_keeps_thinking_off_unless_asked(home, monkeypatch):
+    from apolaki.agent import agent
+    text, sent = _send(monkeypatch, agent, max_tokens=4000)
+    assert sent[0]["think"] is False and sent[0]["options"] == {"temperature": 0.7, "num_predict": 4000}
+    assert text == "the answer"
+
+
+def test_chat_turns_thinking_on_when_asked_and_returns_only_the_answer(home, monkeypatch):
+    from apolaki.agent import agent
+    text, sent = _send(monkeypatch, agent, max_tokens=16000, think=True)
+    assert sent[0]["think"] is True and sent[0]["options"]["num_predict"] == 16000
+    assert text == "the answer" and agent.LAST_RESPONSE["had_thinking"] is True
+
+
+@pytest.mark.parametrize("think", ["high", 1, None])
+def test_chat_refuses_a_think_that_is_not_a_bool(home, monkeypatch, think):
+    """Before it sends anything: the request would go out, and the except below would turn the mistake into a
+    generic LLM error."""
+    from apolaki.agent import agent
+    sent = []
+    monkeypatch.setattr(agent.requests, "post", lambda *a, **k: sent.append(k) or _Resp({}))
+    with pytest.raises(TypeError, match="think"):
+        agent.chat([{"role": "user", "content": "q"}], think=think)
+    assert sent == []

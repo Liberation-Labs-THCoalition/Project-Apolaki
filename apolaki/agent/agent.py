@@ -269,9 +269,14 @@ def _parse_chat_response(data: dict) -> tuple[str, dict]:
     return content, meta
 
 
-def chat(messages: list[dict], temperature: float = 0.7, max_tokens: int = 2048) -> str:
-    """Send messages to Ollama and get the response text. See LAST_RESPONSE for meta."""
+def chat(messages: list[dict], temperature: float = 0.7, max_tokens: int = 2048, think: bool = False) -> str:
+    """Send messages to Ollama and get the response text. See LAST_RESPONSE for meta.
+
+    think is off unless a caller asks. With it on, max_tokens is shared by the reasoning and the answer, so it has to
+    cover both (the grant drafter's runaway test, arm E, 2026-10-24, uses 16000)."""
     global LAST_RESPONSE
+    if not isinstance(think, bool):
+        raise TypeError("think must be True or False, not %r" % (think,))
     LAST_RESPONSE = {}
     try:
         resp = requests.post(
@@ -283,8 +288,9 @@ def chat(messages: list[dict], temperature: float = 0.7, max_tokens: int = 2048)
                 # MODEL is a thinking model. Left on, ollama spends num_predict on
                 # reasoning and returns message.content EMPTY with message.thinking
                 # populated. Verified 2026-09-23 on qwen3.8:27b-mxfp8: think=false
-                # returns content only, no thinking key.
-                "think": False,
+                # returns content only, no thinking key. So off by default; a caller
+                # that turns it on owns the budget (see the docstring).
+                "think": think,
                 "options": {"temperature": temperature, "num_predict": max_tokens},
             },
             timeout=600,
