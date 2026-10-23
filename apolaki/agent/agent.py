@@ -544,8 +544,14 @@ class ApolakiAgent:
     # -- drafting --
 
     def draft_content(self, brief: str, content_type: str = "social",
-                      revise_on_lint_fail: bool = True, max_tokens: int = 4096, reviewer_feedback: str = "") -> dict:
+                      revise_on_lint_fail: bool = True, max_tokens: int = 4096, reviewer_feedback: str = "",
+                      think: bool = False, revise_max_tokens: int | None = None) -> dict:
         """Draft content, lint it, revise once if the mechanical gate fails, queue for approval.
+
+        think turns the model's reasoning on for the first generation only; max_tokens then covers reasoning and draft
+        together. The lint revision always runs with thinking off, at revise_max_tokens (default: max_tokens), so a
+        caller can keep it exactly as it was (the grant drafter's arm E test, 2026-10-23, measured the first
+        generation only). The reasoning never reaches the draft: chat() returns the answer channel alone.
 
         reviewer_feedback is a ready-made reference block (from apolaki.engine) of what reviewers said about recent
         drafts. It joins the retrieved memory, never the brief: the ethics check reads the brief, and a reviewer's
@@ -574,7 +580,12 @@ class ApolakiAgent:
             "deliverable and nothing else: no preamble, no notes, no reasoning, no sign-off."
         ) % (content_type, brief.strip(), block, "\n\n" if block else "", content_type)
 
-        draft = chat(self.history + [{"role": "user", "content": prompt}], max_tokens=max_tokens)
+        if revise_max_tokens is not None and (isinstance(revise_max_tokens, bool)
+                                              or not isinstance(revise_max_tokens, int) or revise_max_tokens < 1):
+            raise ValueError(f"revise_max_tokens must be a positive integer, not {revise_max_tokens!r}")
+        # think is passed only when on, so the default call is exactly what it was before 2026-10-23
+        draft = chat(self.history + [{"role": "user", "content": prompt}], max_tokens=max_tokens,
+                     **({"think": True} if think else {}))
         generation = dict(LAST_RESPONSE)
 
         # An empty, failed or truncated draft must never reach the ethics gate:
@@ -597,7 +608,7 @@ class ApolakiAgent:
 
         if not first["pass"] and first["total_hits"] > 0 and revise_on_lint_fail:
             revised = chat(self.history + [{"role": "user", "content": _revision_prompt(draft, first)}],
-                           max_tokens=max_tokens)
+                           max_tokens=revise_max_tokens or max_tokens)
             rev_meta = dict(LAST_RESPONSE)
             if not is_llm_error(revised) and not rev_meta.get("truncated"):
                 second = lint_summary(lint_draft(revised))

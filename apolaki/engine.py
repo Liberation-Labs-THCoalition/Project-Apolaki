@@ -53,8 +53,10 @@ class ContentCreationChip(k.BaseSkillChip):
         self.agent = agent
 
     async def handle(self, request: k.SkillRequest, context: k.SkillContext) -> k.SkillResponse:
-        # max_tokens reaches the agent only when a caller set it, so the agent's own default holds otherwise.
-        extra = {"max_tokens": request.parameters["max_tokens"]} if "max_tokens" in request.parameters else {}
+        # max_tokens, think and revise_max_tokens reach the agent only when a caller set them, so the agent's own
+        # defaults hold otherwise.
+        extra = {key: request.parameters[key] for key in ("max_tokens", "think", "revise_max_tokens")
+                 if key in request.parameters}
         result = self.agent.draft_content(request.raw_input, content_type=request.parameters.get("content_type", "social"),
                                           reviewer_feedback=context.metadata.get("reviewer_feedback", ""), **extra)
         ok = result.get("status") != "blocked"
@@ -143,13 +145,18 @@ class ApolakiEngine:
                 f'</reviewer_feedback>')
 
     # ---- a request ---------------------------------------------------------------------------------------------
-    def draft(self, brief: str, content_type: str = "social", max_tokens: int | None = None) -> dict:
+    def draft(self, brief: str, content_type: str = "social", max_tokens: int | None = None, think: bool = False,
+              revise_max_tokens: int | None = None) -> dict:
         """One draft, as a BDI intention carried out by the content-creation chip.
 
         max_tokens raises the model's output budget for long forms (a grant section runs past the 4096 default and
-        would come back truncated, which the agent refuses to queue)."""
-        if max_tokens is not None and (isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1):
-            raise ValueError(f"max_tokens must be a positive integer, not {max_tokens!r}")
+        would come back truncated, which the agent refuses to queue). think turns reasoning on for the first
+        generation only, and revise_max_tokens sets the lint revision's budget (see ApolakiAgent.draft_content)."""
+        for name, value in (("max_tokens", max_tokens), ("revise_max_tokens", revise_max_tokens)):
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+                raise ValueError(f"{name} must be a positive integer, not {value!r}")
+        if not isinstance(think, bool):
+            raise TypeError(f"think must be True or False, not {think!r}")
         feedback, used = "", []
         if self.learn:  # off by default: see the module docstring
             self.sync_reviews()
@@ -164,6 +171,10 @@ class ApolakiEngine:
         parameters = {"content_type": content_type}
         if max_tokens is not None:
             parameters["max_tokens"] = max_tokens
+        if think:
+            parameters["think"] = True
+        if revise_max_tokens is not None:
+            parameters["revise_max_tokens"] = revise_max_tokens
         request = k.SkillRequest(intent="draft", raw_input=brief, parameters=parameters)
         response = asyncio.run(chip.handle(request, context))
         if response.success:

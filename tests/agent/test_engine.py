@@ -268,3 +268,104 @@ def test_an_engine_built_without_saying_does_not_learn(home):
     e = ApolakiEngine(agent)
     e.draft("Announce the clinic", "social")
     assert e.learn is False and agent.calls[0]["reviewer_feedback"] == "" and e.bdi.list_beliefs() == []
+
+
+# --- 10-23: thinking for the first generation only, and the revision's own budget (the grant drafter's arm E) ---
+class KwargAgent(FakeAgent):
+    def draft_content(self, brief, content_type="social", reviewer_feedback="", **kw):
+        self.calls.append(dict(kw, content_type=content_type))
+        return {"draft": "DRAFT", "status": self.status, "queue_id": "q1"}
+
+
+def test_think_and_the_revision_budget_reach_the_agent_only_when_set(home):
+    agent = KwargAgent()
+    e = engine(home, agent)
+    e.draft("A grant narrative", "grant", max_tokens=16000, think=True, revise_max_tokens=4000)
+    assert agent.calls[-1] == {"content_type": "grant", "max_tokens": 16000, "think": True, "revise_max_tokens": 4000}
+    e.draft("A post", "social")
+    assert agent.calls[-1] == {"content_type": "social"}
+
+
+@pytest.mark.parametrize("kw,err", [({"revise_max_tokens": 0}, ValueError), ({"revise_max_tokens": True}, ValueError),
+                                    ({"think": "yes"}, TypeError), ({"think": 1}, TypeError)])
+def test_bad_think_or_revision_budget_is_refused_before_any_call(home, kw, err):
+    agent = KwargAgent()
+    with pytest.raises(err):
+        engine(home, agent).draft("A grant narrative", "grant", **kw)
+    assert agent.calls == []
+
+
+def real_agent(A):
+    class Memory:
+        def search(self, query, n_results=6):
+            return []
+    agent = object.__new__(A.ApolakiAgent)
+    agent.memory, agent.history, agent.auto_capture, agent.house_rules_count = Memory(), [{"role": "system", "content": "S"}], False, 0
+    return agent
+
+
+def test_thinking_reaches_the_first_generation_only_and_the_revision_keeps_its_budget(home, monkeypatch):
+    from apolaki.agent import agent as A
+    calls = []
+
+    def fake_chat(messages, temperature=0.7, max_tokens=2048, **kw):
+        calls.append((max_tokens, kw.get("think", False)))
+        A.LAST_RESPONSE.clear()
+        A.LAST_RESPONSE.update({"truncated": False})
+        return "Our tenant clinic opens Monday at the library."
+
+    hit = {"line": 1, "check": "x", "detail": None, "text": "t", "rule": "r"}
+    lint = iter([{"pass": False, "total_hits": 2, "failing_checks": ["x"], "hits": [hit]},
+                 {"pass": True, "total_hits": 0, "failing_checks": [], "hits": []}])
+    monkeypatch.setattr(A, "chat", fake_chat)
+    monkeypatch.setattr(A, "lint_draft", lambda d: d)
+    monkeypatch.setattr(A, "lint_summary", lambda r: next(lint))
+    engine(home, real_agent(A)).draft("Announce the clinic", "grant", max_tokens=16000, think=True,
+                                      revise_max_tokens=4000)
+    assert calls == [(16000, True), (4000, False)]
+
+
+def test_by_default_the_model_is_called_exactly_as_before(home, monkeypatch):
+    from apolaki.agent import agent as A
+    seen = []
+
+    def fake_chat(messages, temperature=0.7, max_tokens=2048):    # no think argument: a call with one would fail
+        seen.append(max_tokens)
+        A.LAST_RESPONSE.clear()
+        A.LAST_RESPONSE.update({"truncated": False})
+        return "Our tenant clinic opens Monday at the library."
+    monkeypatch.setattr(A, "chat", fake_chat)
+    try:
+        engine(home, real_agent(A)).draft("Announce the clinic", "social", max_tokens=8000)
+    except TypeError as e:
+        pytest.fail(f"the default path passed chat() an argument it never used to: {e}")
+    assert seen and set(seen) == {8000}
+
+
+def test_the_reasoning_channel_never_reaches_the_draft(home, monkeypatch):
+    """Through the real chat() and its parser: the model's reasoning carries a marker, the draft must not."""
+    from apolaki.agent import agent as A
+    marker = "REASONING-ONLY-7f3a"
+
+    class Resp:
+        status_code = 200
+
+        def json(self):
+            return {"message": {"content": "Our tenant clinic opens Monday at the library.",
+                                "thinking": f"Plan the post. {marker} Keep it short."}, "done_reason": "stop"}
+    sent = []
+    monkeypatch.setattr(A.requests, "post", lambda url, json=None, timeout=None: sent.append(json) or Resp())
+    out = engine(home, real_agent(A)).draft("Announce the clinic", "social", max_tokens=16000, think=True)
+    assert sent and sent[0]["think"] is True
+    assert out["draft"] and marker not in out["draft"] and marker not in json.dumps(out)
+
+
+@pytest.mark.parametrize("bad", [0, -5, True, "4000"])
+def test_the_agent_refuses_a_bad_revision_budget_itself_before_any_call(monkeypatch, bad):
+    """The engine checks first; this checks the agent's own guard, for callers that use it directly."""
+    from apolaki.agent import agent as A
+    calls = []
+    monkeypatch.setattr(A, "chat", lambda *a, **k: calls.append(1) or "x")
+    with pytest.raises(ValueError, match="revise_max_tokens"):
+        real_agent(A).draft_content("Announce the clinic", "grant", revise_max_tokens=bad)
+    assert calls == []
