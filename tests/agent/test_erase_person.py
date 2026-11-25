@@ -4,6 +4,7 @@ leave nothing: not a row, not an embedding, not a wiki page, not a byte of the d
 here are invented."""
 import hashlib
 import json
+import os
 import re
 import sqlite3
 
@@ -11,6 +12,23 @@ import pytest
 
 np = pytest.importorskip("numpy")
 from apolaki.agent import memory_store as ms  # noqa: E402
+
+
+def _can_symlink():
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as d:
+        try:
+            (Path(d) / "link").symlink_to(Path(d))
+            return True
+        except (OSError, NotImplementedError):
+            return False
+
+
+needs_symlinks = pytest.mark.skipif(
+    not _can_symlink(), reason="this account can't create symlinks (on Windows: needs Developer Mode or admin)")
+needs_posix_modes = pytest.mark.skipif(
+    os.name == "nt", reason="makes folders unreadable with chmod, which Windows doesn't honour")
 
 PERSON = "Marisol Quintero"
 KNOWN = [("Marisol Quintero", "PERSON"), ("Dev Okafor", "PERSON"), ("Riverside Commons", "ORG"),
@@ -119,7 +137,7 @@ def snapshot(home):
         rows = {t: sorted(map(repr, con.execute(f"SELECT * FROM {t}").fetchall())) for t in tables}
     finally:
         con.close()
-    files = {str(f.relative_to(home)): f.read_bytes() for f in sorted((home / "wiki").rglob("*")) if f.is_file()}
+    files = {f.relative_to(home).as_posix(): f.read_bytes() for f in sorted((home / "wiki").rglob("*")) if f.is_file()}
     for name in ("engine_beliefs.json", "engine_beliefs_log.jsonl"):
         files[name] = (home / name).read_bytes()
     return rows, files
@@ -129,9 +147,9 @@ def all_bytes_naming(home, word, skip=()):
     """Files under home whose bytes (or name) contain word, case-insensitively, apart from the ones in skip."""
     out = []
     for f in sorted(home.rglob("*")):
-        if f.is_file() and str(f.relative_to(home)) not in skip:
+        if f.is_file() and f.relative_to(home).as_posix() not in skip:
             if word.lower().encode() in f.read_bytes().lower() or word.lower() in f.name.lower():
-                out.append(str(f.relative_to(home)))
+                out.append(f.relative_to(home).as_posix())
     return out
 
 
@@ -2455,6 +2473,8 @@ def test_a_name_written_in_look_alike_letter_symbols_is_still_found(home, writte
 
 # Item 2: an empty folder, a link that leads to no file, or a link to a folder, named for the person, wasn't listed:
 # only files were walked.
+@needs_symlinks
+@needs_posix_modes
 def test_an_empty_folder_or_a_dangling_link_named_for_the_person_is_listed(home):
     import os
     from apolaki.agent import erase as X
@@ -2535,6 +2555,7 @@ def test_a_wiki_folder_the_erase_empties_is_removed(home):
     assert p.wiki_folders == ["people/Marisol Quintero/deeper", "people/Marisol Quintero", "Marisol Quintero"]
 
 
+@needs_symlinks
 def test_a_wiki_folder_or_link_named_for_the_person_that_the_erase_leaves_makes_it_incomplete(home):
     """One the erase didn't empty (empty before, or a link) stays; the check reads its name, so the erase isn't
     verified. Before round A4 it read only the wiki's file names, and recorded such an erase verified."""
@@ -2580,6 +2601,7 @@ def _locked(home, rel, mode):
 
 
 @pytest.mark.parametrize("mode", [0o000, 0o400, 0o300], ids=["none", "read only", "no read"])
+@needs_posix_modes
 def test_a_folder_that_cant_be_read_is_listed_and_the_erase_refuses_until_it_is_checked(home, mode, capsys):
     import apolaki.engine as E
     from apolaki.agent import erase as X
@@ -2612,6 +2634,7 @@ def test_a_folder_that_cant_be_read_is_listed_and_the_erase_refuses_until_it_is_
     assert p.unread_folders == ["exports/locked"]
 
 
+@needs_posix_modes
 def test_a_named_entry_in_a_folder_that_can_be_listed_but_not_entered_is_listed_by_name(home):
     from apolaki.agent import erase as X
     plant(home)
@@ -2630,6 +2653,7 @@ def test_a_named_entry_in_a_folder_that_can_be_listed_but_not_entered_is_listed_
                                "wiki/locked/marisol_quintero.txt": "in a folder the dry run can't read"}
 
 
+@needs_posix_modes
 def test_a_folder_named_for_the_person_that_cant_be_read_needs_a_check_and_the_record_doesnt_name_her(home):
     from apolaki.agent import erase as X
     plant(home)
@@ -2645,6 +2669,7 @@ def test_a_folder_named_for_the_person_that_cant_be_read_needs_a_check_and_the_r
     assert "marisol" not in ledger.lower() and json.loads(ledger)["checked_by_person"] == ["[erased]"]
 
 
+@needs_posix_modes
 def test_an_unreadable_folder_changes_the_code(home):
     from apolaki.agent import erase as X
     plant(home)
@@ -2700,6 +2725,7 @@ def test_a_wiki_folder_the_erase_empties_is_removed_with_no_database(home):
     assert not (home / "wiki" / "Marisol Quintero").exists() and (home / "wiki").is_dir()
 
 
+@needs_posix_modes
 def test_the_command_line_counts_hand_added_things_and_folders_apart(home, capsys):
     """U10: one hand-added index and one folder the dry run can't read are two different counts."""
     import apolaki.engine as E
@@ -2718,6 +2744,7 @@ def test_the_command_line_counts_hand_added_things_and_folders_apart(home, capsy
            "1 folder(s) the dry run couldn't read checked by a person" in capsys.readouterr().out
 
 
+@needs_posix_modes
 def test_a_checked_wiki_folder_that_cant_be_entered_doesnt_stop_the_check(home):
     """U11: the check after the erase walks the wiki; a folder there that can be listed but not entered, which a person
     checked, must not stop it with a Python error after the rows are gone (no record would be written)."""

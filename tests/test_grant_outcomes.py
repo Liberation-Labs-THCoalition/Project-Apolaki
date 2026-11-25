@@ -191,10 +191,10 @@ def test_nothing_else_in_the_package_reads_the_outcome_log():
     log) and Thomas's decision; this list is the test's own, so adding a reader means editing it on purpose."""
     found = []
     for p in sorted((ROOT / "apolaki").rglob("*.py")):
-        rel = str(p.relative_to(ROOT))
+        rel = p.relative_to(ROOT).as_posix()
         if rel in ALLOWED_READERS:
             continue
-        text = p.read_text()
+        text = p.read_text(encoding="utf-8")
         tree = ast.parse(text)
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module and "outcomes" in node.module:

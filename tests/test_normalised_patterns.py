@@ -251,4 +251,4 @@ def test_the_queue_keeps_the_text_exactly_as_drafted(tmp_path, monkeypatch):
     text = "We\u2019re open \u201cevery\u201d day; caf\u00e9 hours vary." + ZW
     item_id = agent.queue_for_approval(text, "social")
     (p,) = (tmp_path / "approval-queue").glob(f"{item_id}_*.json")
-    assert json.loads(p.read_text())["content"] == text
+    assert json.loads(p.read_text(encoding="utf-8"))["content"] == text

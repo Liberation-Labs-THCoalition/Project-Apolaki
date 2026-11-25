@@ -36,7 +36,7 @@ def _declared():
 def _third_party_imports():
     found = {}
     for p in sorted((ROOT / "apolaki" / "agent").rglob("*.py")):
-        for node in ast.walk(ast.parse(p.read_text())):
+        for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Import):
                 names = [a.name for a in node.names]
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:

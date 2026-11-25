@@ -719,6 +719,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--prose", action="store_true", help="print the normalised prose and exit")
     args = ap.parse_args(argv)
 
+    for stream in (sys.stdout, sys.stdin):      # the output and the prose hold non-ASCII; a Windows console's
+        try:                                    # code page (cp1252) can't print or read all of it
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
+
     try:
         if args.file == "-":
             src = sys.stdin.read()

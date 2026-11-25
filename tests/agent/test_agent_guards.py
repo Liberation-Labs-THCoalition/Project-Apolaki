@@ -30,7 +30,7 @@ def test_style_lint_matches_its_answer_keys(key_path):
     import apolaki.agent.style_lint as sl
     key = json.loads(key_path.read_text(encoding="utf-8"))
     proc = subprocess.run([sys.executable, sl.__file__, "--json", str(FIXTURES / key["fixture"])],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, encoding="utf-8")
     assert proc.returncode == key["expected_exit"], proc.stderr
     got = json.loads(proc.stdout)
     lines = lambda hits: sorted(h["line"] for h in hits)                     # noqa: E731

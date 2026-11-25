@@ -1327,7 +1327,7 @@ def plan(name: str, aliases: tuple[str, ...] = (), home: Path | None = None) -> 
     kept_by_file = {_wiki_name(n): n for n in kept}
     if p["wiki"].is_dir():
         for f in sorted(p["wiki"].rglob("*")):
-            rel = str(f.relative_to(p["wiki"]))
+            rel = f.relative_to(p["wiki"]).as_posix()
             try:
                 is_file = f.is_file()
             except OSError:          # in a folder that can be listed but not entered: listed in unread_folders
@@ -1346,7 +1346,7 @@ def plan(name: str, aliases: tuple[str, ...] = (), home: Path | None = None) -> 
             else:                 # a page the erase leaves alone: its name and text can still hold a near-match
                 nears += [({"file": "wiki/" + rel}, w, t) for t in (rel.replace("_", " "), text)
                           for w in _near_words(hit, loose, t)]
-        out.wiki_folders = [str(d.relative_to(p["wiki"]))
+        out.wiki_folders = [d.relative_to(p["wiki"]).as_posix()
                             for d in _emptied_folders(p["wiki"], {p["wiki"] / f["file"] for f in out.wiki_files})]
 
     try:
@@ -1380,7 +1380,7 @@ def plan(name: str, aliases: tuple[str, ...] = (), home: Path | None = None) -> 
     for f in sorted(home.rglob("*")) if home.is_dir() else []:
         if f in handled or p["wiki"] in f.parents:
             continue
-        rel = str(f.relative_to(home))
+        rel = f.relative_to(home).as_posix()
         try:
             is_file = f.is_file()
         except OSError:              # in a folder that can be listed but not entered: listed in unread_folders
@@ -1411,7 +1411,7 @@ def plan(name: str, aliases: tuple[str, ...] = (), home: Path | None = None) -> 
                         else ""
                 except (ValueError, UnicodeDecodeError):
                     pass
-            out.records += [{"kind": _RECORDS[top[0]] + status, "file": str(f.relative_to(home)), "where": w,
+            out.records += [{"kind": _RECORDS[top[0]] + status, "file": f.relative_to(home).as_posix(), "where": w,
                              "text": _hit_snippet(v, hit)} for w, v in found]
             n = max(n, len(found))
         if n:
@@ -1421,7 +1421,7 @@ def plan(name: str, aliases: tuple[str, ...] = (), home: Path | None = None) -> 
                                        + len(_near_words(hit, loose, rel))))
 
     # Any folder under $APOLAKI_HOME it can't read, named for the person or not: a person checks it (round A4).
-    out.unread_folders = [str(d.relative_to(home)) for d in _unread_folders(home)] if home.is_dir() else []
+    out.unread_folders = [d.relative_to(home).as_posix() for d in _unread_folders(home)] if home.is_dir() else []
 
     ident = {"names": [_fold(n) for n in names], "memories": [m["id"] for m in out.memories],
              "entities": [e["id"] for e in out.entities], "mentions": out.mentions, "triples": out.triples,
