@@ -409,6 +409,55 @@ def _parse_chat_response(data: dict) -> tuple[str, dict]:
     return content, meta
 
 
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+# Tokens the Anthropic backend has been billed for in this process, every call counted (a draft and its lint revision
+# are two). A caller that meters spend, like the hosted demo, reads the difference before and after a draft.
+USAGE = {"input_tokens": 0, "output_tokens": 0}
+
+
+def _anthropic_as_chat_body(data: dict) -> dict:
+    """One Anthropic /v1/messages body in the shape _parse_chat_response reads (an Ollama /api/chat body), so
+    errors, empty replies and truncation are handled by the same code for both backends."""
+    if not isinstance(data, dict) or data.get("type") == "error" or data.get("error"):
+        err = data.get("error") if isinstance(data, dict) else None
+        message = err.get("message") if isinstance(err, dict) else (err or data)
+        return {"error": str(message)[:300]}
+    text = "".join(b.get("text", "") for b in data.get("content") or [] if isinstance(b, dict) and b.get("type") == "text")
+    usage = data.get("usage") or {}
+    return {"message": {"content": text},
+            "done_reason": "length" if data.get("stop_reason") == "max_tokens" else data.get("stop_reason"),
+            "eval_count": usage.get("output_tokens"), "prompt_eval_count": usage.get("input_tokens")}
+
+
+def _chat_anthropic(messages: list[dict], max_tokens: int) -> str:
+    """chat() for APOLAKI_BACKEND=anthropic. The key is read from ANTHROPIC_API_KEY and goes nowhere but the header.
+    No temperature is sent: some current models refuse it. think is ignored (the model decides)."""
+    global LAST_RESPONSE
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not key:
+        LAST_RESPONSE = {"error": "no ANTHROPIC_API_KEY"}
+        return "[LLM Error: APOLAKI_BACKEND=anthropic needs ANTHROPIC_API_KEY in the environment]"
+    wire = [_wire(m) for m in messages]
+    system = "\n\n".join(m["content"] for m in wire if m.get("role") == "system")
+    rest = [m for m in wire if m.get("role") != "system"]
+    resp = requests.post(ANTHROPIC_URL, headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                                                 "content-type": "application/json"},
+                         json={"model": MODEL, "max_tokens": max_tokens, "system": system, "messages": rest},
+                         timeout=120)
+    try:
+        data = resp.json()
+    except ValueError:
+        LAST_RESPONSE = {"error": "non-JSON body", "http_status": resp.status_code}
+        return "[LLM Error: HTTP %s, non-JSON body]" % resp.status_code
+    for field, name in (("input_tokens", "input_tokens"), ("output_tokens", "output_tokens")):
+        used = (data.get("usage") or {}).get(name) if isinstance(data, dict) else None
+        USAGE[field] += used if isinstance(used, int) and used > 0 else 0
+    text, meta = _parse_chat_response(_anthropic_as_chat_body(data))
+    meta["http_status"] = resp.status_code
+    LAST_RESPONSE = meta
+    return text
+
+
 def chat(messages: list[dict], temperature: float = 0.7, max_tokens: int = 2048, think: bool = False) -> str:
     """Send messages to Ollama and get the response text. See LAST_RESPONSE for meta.
 
@@ -419,6 +468,8 @@ def chat(messages: list[dict], temperature: float = 0.7, max_tokens: int = 2048,
         raise TypeError("think must be True or False, not %r" % (think,))
     LAST_RESPONSE = {}
     try:
+        if config.backend() == "anthropic":
+            return _chat_anthropic(messages, max_tokens)
         resp = requests.post(
             f"{OLLAMA_BASE}/api/chat",
             json={
@@ -640,8 +691,10 @@ SCAFFOLD_MARK = "scaffold"
 # ── Agent Loop ──
 
 class ApolakiAgent:
-    def __init__(self, auto_capture: bool = False):
-        self.memory = ApolakiMemoryStore()
+    def __init__(self, auto_capture: bool = False, memory=None):
+        """memory: a store to use instead of the default ApolakiMemoryStore (the hosted demo passes an empty,
+        read-only one, so nothing a visitor writes is kept). It needs list_by_type, search, store and close."""
+        self.memory = memory if memory is not None else ApolakiMemoryStore()
         self.auto_capture = auto_capture
         self.history: list[dict] = []
         self.house_rules_count = 0

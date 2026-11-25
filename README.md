@@ -149,6 +149,8 @@ python -m apolaki.agent.style_pass draft.md   # the judgement pass on a finished
 python -m apolaki.agent.fact_checker draft.md # the fact checker
 ```
 
+A hosted, capped demo that needs only an Anthropic key (no local model) is described in [docs/DEMO.md](docs/DEMO.md).
+
 Configuration comes from the environment:
 
 | Variable | What it sets | Default |

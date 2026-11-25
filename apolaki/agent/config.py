@@ -3,7 +3,9 @@
     APOLAKI_HOME            the deployment's folder: approval-queue/, db/, wiki/, grant-drafts/ (default ~/.apolaki)
     APOLAKI_BRAND_FILE      the brand file (default $APOLAKI_HOME/brand.json; see brand.example.json)
     OLLAMA_BASE             the model server (default http://localhost:11434)
-    APOLAKI_MODEL           the chat model (default qwen3.8:27b-mxfp8)
+    APOLAKI_MODEL           the chat model (default qwen3.8:27b-mxfp8; claude-haiku-5-5 with the Anthropic backend)
+    APOLAKI_BACKEND         "ollama" (default) or "anthropic": where chat() sends a request. "anthropic" reads the key
+                            from ANTHROPIC_API_KEY (never from a file) and covers the drafting path only
     APOLAKI_DISCORD_CHANNEL the admin channel the Discord hook posts approval items to (no default: off when unset)
 
 Nothing is created at import. A folder is made the first time something is written into it.
@@ -30,8 +32,16 @@ def ollama_base() -> str:
     return os.environ.get("OLLAMA_BASE", "http://localhost:11434")
 
 
+def backend() -> str:
+    value = os.environ.get("APOLAKI_BACKEND", "ollama").strip().lower() or "ollama"
+    if value not in ("ollama", "anthropic"):
+        raise ValueError(f"APOLAKI_BACKEND must be 'ollama' or 'anthropic', not {value!r}")
+    return value
+
+
 def model() -> str:
-    return os.environ.get("APOLAKI_MODEL", "qwen3.8:27b-mxfp8")
+    default = "claude-haiku-5-5" if backend() == "anthropic" else "qwen3.8:27b-mxfp8"
+    return os.environ.get("APOLAKI_MODEL", default)
 
 
 def discord_channel() -> str:
